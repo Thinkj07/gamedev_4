@@ -243,6 +243,9 @@ class App:
         self._tick = 0
 
         self._btn_hovers = {}
+        self._htp_drag = False        
+        self._htp_drag_start_y = 0   
+        self._htp_drag_start_s = 0   
 
         self._htp_scroll = 0
 
@@ -416,7 +419,26 @@ class App:
 
     def _htp_inner_rect(self):
         panel = pygame.Rect(100, 100, SCREEN_WIDTH - 200, 550)
-        return pygame.Rect(panel.x + 20, panel.y + 15, panel.w - 40, panel.h - 30)
+        return pygame.Rect(panel.x + 20, panel.y + 15, panel.w - 58, panel.h - 30)
+
+    def _htp_scrollbar_rects(self):
+        """Return (track_rect, thumb_rect) for the scrollbar."""
+        panel = pygame.Rect(100, 100, SCREEN_WIDTH - 200, 550)
+        track_x = panel.right - 28
+        track_y = panel.y + 14
+        track_h = panel.h - 28
+        track = pygame.Rect(track_x, track_y, 10, track_h)
+        max_scroll = self._htp_max_scroll()
+        if max_scroll <= 0:
+            return track, pygame.Rect(track_x, track_y, 10, track_h)
+        inner_h = self._htp_inner_rect().h
+        content_h = inner_h + max_scroll
+        ratio = inner_h / content_h
+        thumb_h = max(28, int(track_h * ratio))
+        thumb_travel = track_h - thumb_h
+        thumb_y = track_y + int(thumb_travel * self._htp_scroll / max_scroll)
+        thumb = pygame.Rect(track_x, thumb_y, 10, thumb_h)
+        return track, thumb
 
     def _htp_rules(self):
         return [
@@ -461,13 +483,30 @@ class App:
         if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
             self.state = "menu"
             return
+        _, thumb = self._htp_scrollbar_rects()
+        max_scroll = self._htp_max_scroll()
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             if self._htp_back_btn().collidepoint(mp):
                 self._play(self.snd_click)
                 self.state = "menu"
+            elif thumb.collidepoint(mp) and max_scroll > 0:
+                self._htp_drag = True
+                self._htp_drag_start_y = mp[1]
+                self._htp_drag_start_s = self._htp_scroll
+        if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+            self._htp_drag = False
+        if ev.type == pygame.MOUSEMOTION and self._htp_drag and max_scroll > 0:
+            track, _ = self._htp_scrollbar_rects()
+            thumb_h = max(28, int(track.h * self._htp_inner_rect().h /
+                                  (self._htp_inner_rect().h + max_scroll)))
+            thumb_travel = track.h - thumb_h
+            if thumb_travel > 0:
+                dy = mp[1] - self._htp_drag_start_y
+                self._htp_scroll = self._htp_drag_start_s + int(dy * max_scroll / thumb_travel)
+                self._htp_scroll = max(0, min(self._htp_scroll, max_scroll))
         if ev.type == pygame.MOUSEWHEEL:
             self._htp_scroll = max(0, self._htp_scroll - ev.y * 20)
-            self._htp_scroll = min(self._htp_scroll, self._htp_max_scroll())
+            self._htp_scroll = min(self._htp_scroll, max_scroll)
 
 
     def _mode_btns(self):
@@ -751,6 +790,27 @@ class App:
         for rect, label, ok in self._menu_btns():
             self._draw_button(rect, label, mp, ok)
 
+    def _draw_htp_scrollbar(self, mp):
+        """Draw scrollbar track + thumb with hover highlight."""
+        track, thumb = self._htp_scrollbar_rects()
+        max_scroll = self._htp_max_scroll()
+        if max_scroll <= 0:
+            return
+
+        track_surf = pygame.Surface((track.w, track.h), pygame.SRCALPHA)
+        track_surf.fill((0, 0, 0, 0))
+        pygame.draw.rect(track_surf, (*CREAM_DARK[:3], 120), (0, 0, track.w, track.h), border_radius=5)
+        self.screen.blit(track_surf, (track.x, track.y))
+
+        hovered = thumb.collidepoint(mp) or self._htp_drag
+        thumb_col = BTN_HOVER if hovered else BTN_NORMAL
+        pygame.draw.rect(self.screen, thumb_col, thumb, border_radius=5)
+
+        highlight_rect = pygame.Rect(thumb.x + 2, thumb.y + 4, 2, thumb.h - 8)
+        hl_surf = pygame.Surface((highlight_rect.w, highlight_rect.h), pygame.SRCALPHA)
+        hl_surf.fill((*WHITE[:3], 80))
+        self.screen.blit(hl_surf, (highlight_rect.x, highlight_rect.y))
+
 
     def _dr_howtoplay(self, mp):
         self._draw_top_bar()
@@ -782,6 +842,7 @@ class App:
                 y += 24
             y += 14
         self.screen.set_clip(prev_clip)
+        self._draw_htp_scrollbar(mp)
 
         self._draw_button(self._htp_back_btn(), "Back", mp)
 

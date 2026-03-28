@@ -17,25 +17,18 @@ def _next_player(p: int, num_p: int) -> int:
 def _valid_moves(board: Board) -> List[int]:
     return board.valid_moves()
 
-
-# --- Heuristic windows (four in a row segments) --------------------------------
-
 def _iter_windows() -> Sequence[Tuple[Tuple[int, int], ...]]:
     """All axis-aligned / diagonal segments of length 4."""
     out: List[Tuple[Tuple[int, int], ...]] = []
-    # horizontal
     for r in range(ROWS):
         for c in range(COLS - 3):
             out.append(tuple((r, c + k) for k in range(4)))
-    # vertical
     for c in range(COLS):
         for r in range(ROWS - 3):
             out.append(tuple((r + k, c) for k in range(4)))
-    # diag \
     for r in range(ROWS - 3):
         for c in range(COLS - 3):
             out.append(tuple((r + k, c + k) for k in range(4)))
-    # diag /
     for r in range(ROWS - 3):
         for c in range(3, COLS):
             out.append(tuple((r + k, c - k) for k in range(4)))

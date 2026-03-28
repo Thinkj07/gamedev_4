@@ -449,20 +449,17 @@ class App:
             ("GAMEPLAY", [
                 "• Players take turns dropping a disc into one of the 8 columns.",
                 "• The disc falls to the lowest empty cell.",
-                "• If the board fills up with no winner,",
-                "  the game ends in a draw.",
+                "• If the board fills up with no winner the game ends in a draw.",
             ]),
             ("GAME MODES", [
                 "• SinglePlayer: 1 or 2 AI opponents; Player 1 can be",
                 "  Human or AI (Random, MCTS, Minimax).",
-                "• Multiplayer: Play with 1 or 2 friends",
-                "  on the same device.",
+                "• Multiplayer: Play with 1 or 2 friends on the same device.",
             ]),
             ("CONTROLS", [
                 "• Left-click a column to drop your disc.",
                 "• Press ESC to pause the game.",
-                "• Use the pause menu to save & quit,",
-                "  or return to the main menu.",
+                "• Use the pause menu to save & quit or return to the main menu.",
             ]),
             ("AI DIFFICULTY", [
                 "• Random: Easy - picks any valid column.",

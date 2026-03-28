@@ -1,5 +1,3 @@
-"""Pygame app: menus, tinted bitmap board, disc sprites, game loop, save/load."""
-
 import pygame
 import sys
 import os
@@ -10,6 +8,7 @@ import array
 from constants import *
 from board import Board
 from ai import RandomAI, MCTSAI, MinimaxAI
+from ai_ml import ML_MinimaxAI, ML_MCTSAI
 
 
 def _ease_out_quad(t):
@@ -49,7 +48,7 @@ def _gradient_surface(w, h, top, bot):
 
 
 def _load_disc_template():
-    """Load 12×12 disc PNG; try DISC_PATH then disc.png."""
+    """Load 12x12 disc PNG; try DISC_PATH then disc.png."""
     base = os.path.dirname(os.path.abspath(__file__))
     for rel in (DISC_PATH, "assets/sprite/disc.png"):
         path = os.path.join(base, rel)
@@ -245,6 +244,10 @@ class App:
         self._btn_hovers = {}
 
         self._htp_scroll = 0
+        self._htp_drag = False        # True while dragging scrollbar thumb
+        self._htp_drag_start_y = 0   # cursor y when drag began
+        self._htp_drag_start_s = 0   # scroll value when drag began
+
 
 
     def _play(self, snd):
@@ -416,7 +419,29 @@ class App:
 
     def _htp_inner_rect(self):
         panel = pygame.Rect(100, 100, SCREEN_WIDTH - 200, 550)
-        return pygame.Rect(panel.x + 20, panel.y + 15, panel.w - 40, panel.h - 30)
+        # Leave 18 px on the right for the scrollbar
+        return pygame.Rect(panel.x + 20, panel.y + 15, panel.w - 58, panel.h - 30)
+
+    def _htp_scrollbar_rects(self):
+        """Return (track_rect, thumb_rect) for the scrollbar."""
+        panel = pygame.Rect(100, 100, SCREEN_WIDTH - 200, 550)
+        track_x = panel.right - 28
+        track_y = panel.y + 14
+        track_h = panel.h - 28
+        track = pygame.Rect(track_x, track_y, 10, track_h)
+
+        max_scroll = self._htp_max_scroll()
+        if max_scroll <= 0:
+            return track, pygame.Rect(track_x, track_y, 10, track_h)
+
+        inner_h = self._htp_inner_rect().h
+        content_h = inner_h + max_scroll
+        ratio = inner_h / content_h
+        thumb_h = max(28, int(track_h * ratio))
+        thumb_travel = track_h - thumb_h
+        thumb_y = track_y + int(thumb_travel * self._htp_scroll / max_scroll)
+        thumb = pygame.Rect(track_x, thumb_y, 10, thumb_h)
+        return track, thumb
 
     def _htp_rules(self):
         return [
@@ -427,20 +452,17 @@ class App:
             ("GAMEPLAY", [
                 "• Players take turns dropping a disc into one of the 8 columns.",
                 "• The disc falls to the lowest empty cell.",
-                "• If the board fills up with no winner,",
-                "  the game ends in a draw.",
+                "• If the board fills up with no winner the game ends in a draw.",
             ]),
             ("GAME MODES", [
                 "• SinglePlayer: 1 or 2 AI opponents; Player 1 can be",
                 "  Human or AI (Random, MCTS, Minimax).",
-                "• Multiplayer: Play with 1 or 2 friends",
-                "  on the same device.",
+                "• Multiplayer: Play with 1 or 2 friends on the same device.",
             ]),
             ("CONTROLS", [
                 "• Left-click a column to drop your disc.",
                 "• Press ESC to pause the game.",
-                "• Use the pause menu to save & quit,",
-                "  or return to the main menu.",
+                "• Use the pause menu to save & quit or return to the main menu.",
             ]),
             ("AI DIFFICULTY", [
                 "• Random: Easy - picks any valid column.",
@@ -448,6 +470,8 @@ class App:
                 "  More simulations = harder (200 - 5000).",
                 "• Minimax: Hard - thinks several moves ahead.",
                 "  Higher depth = harder (2 - 6).",
+                "• ML: Expert - uses trained neural network.",
+                "  Fast and strong.",
             ]),
         ]
 
@@ -461,13 +485,35 @@ class App:
         if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
             self.state = "menu"
             return
+
+        _, thumb = self._htp_scrollbar_rects()
+        max_scroll = self._htp_max_scroll()
+
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             if self._htp_back_btn().collidepoint(mp):
                 self._play(self.snd_click)
                 self.state = "menu"
+            elif thumb.collidepoint(mp) and max_scroll > 0:
+                self._htp_drag = True
+                self._htp_drag_start_y = mp[1]
+                self._htp_drag_start_s = self._htp_scroll
+
+        if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+            self._htp_drag = False
+
+        if ev.type == pygame.MOUSEMOTION and self._htp_drag and max_scroll > 0:
+            track, _ = self._htp_scrollbar_rects()
+            thumb_h = max(28, int(track.h * self._htp_inner_rect().h /
+                                  (self._htp_inner_rect().h + max_scroll)))
+            thumb_travel = track.h - thumb_h
+            if thumb_travel > 0:
+                dy = mp[1] - self._htp_drag_start_y
+                self._htp_scroll = self._htp_drag_start_s + int(dy * max_scroll / thumb_travel)
+                self._htp_scroll = max(0, min(self._htp_scroll, max_scroll))
+
         if ev.type == pygame.MOUSEWHEEL:
             self._htp_scroll = max(0, self._htp_scroll - ev.y * 20)
-            self._htp_scroll = min(self._htp_scroll, self._htp_max_scroll())
+            self._htp_scroll = min(self._htp_scroll, max_scroll)
 
 
     def _mode_btns(self):
@@ -752,6 +798,30 @@ class App:
             self._draw_button(rect, label, mp, ok)
 
 
+    def _draw_htp_scrollbar(self, mp):
+        """Draw scrollbar track + thumb with hover highlight."""
+        track, thumb = self._htp_scrollbar_rects()
+        max_scroll = self._htp_max_scroll()
+        if max_scroll <= 0:
+            return
+
+        # Track
+        track_surf = pygame.Surface((track.w, track.h), pygame.SRCALPHA)
+        track_surf.fill((0, 0, 0, 0))
+        pygame.draw.rect(track_surf, (*CREAM_DARK[:3], 120), (0, 0, track.w, track.h), border_radius=5)
+        self.screen.blit(track_surf, (track.x, track.y))
+
+        # Thumb – brighter when hovered or dragging
+        hovered = thumb.collidepoint(mp) or self._htp_drag
+        thumb_col = BTN_HOVER if hovered else BTN_NORMAL
+        pygame.draw.rect(self.screen, thumb_col, thumb, border_radius=5)
+
+        # Thin highlight line on left edge of thumb for depth
+        highlight_rect = pygame.Rect(thumb.x + 2, thumb.y + 4, 2, thumb.h - 8)
+        hl_surf = pygame.Surface((highlight_rect.w, highlight_rect.h), pygame.SRCALPHA)
+        hl_surf.fill((*WHITE[:3], 80))
+        self.screen.blit(hl_surf, (highlight_rect.x, highlight_rect.y))
+
     def _dr_howtoplay(self, mp):
         self._draw_top_bar()
         self._shadow_text(self.f_lg, "HOW TO PLAY", SCREEN_WIDTH // 2, 50, TEXT_COLOR)
@@ -783,6 +853,7 @@ class App:
             y += 14
         self.screen.set_clip(prev_clip)
 
+        self._draw_htp_scrollbar(mp)
         self._draw_button(self._htp_back_btn(), "Back", mp)
 
 
@@ -1031,6 +1102,10 @@ class App:
                 self.ais[i] = MCTSAI(MCTS_OPTIONS[self.cfg_mcts[i]])
             elif tp == "Minimax":
                 self.ais[i] = MinimaxAI(MINIMAX_DEPTHS[self.cfg_mm[i]])
+            elif tp == "ML-Minimax":
+                self.ais[i] = ML_MinimaxAI(MINIMAX_DEPTHS[self.cfg_mm[i]])
+            elif tp == "ML-MCTS":
+                self.ais[i] = ML_MCTSAI(MCTS_OPTIONS[self.cfg_mcts[i]])
         self.state = "playing"
 
 
@@ -1075,6 +1150,10 @@ class App:
                     self.ais[i] = MCTSAI(MCTS_OPTIONS[self.cfg_mcts[i]])
                 elif tp == "Minimax":
                     self.ais[i] = MinimaxAI(MINIMAX_DEPTHS[self.cfg_mm[i]])
+                elif tp == "ML-Minimax":
+                    self.ais[i] = ML_MinimaxAI(MINIMAX_DEPTHS[self.cfg_mm[i]])
+                elif tp == "ML-MCTS":
+                    self.ais[i] = ML_MCTSAI(MCTS_OPTIONS[self.cfg_mcts[i]])
             self.winner = 0
             self.win_cells = []
             self.anim = False

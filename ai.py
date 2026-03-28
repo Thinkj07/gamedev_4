@@ -1,5 +1,3 @@
-"""AI players: Random, MCTS (UCT), and paranoid Minimax for 2–3 player Connect Four."""
-
 from __future__ import annotations
 
 import math

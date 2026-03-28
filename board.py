@@ -1,5 +1,3 @@
-"""Grid logic, O(1) drops, and win detection for 8×7 three-player Connect Four."""
-
 import random as _rng
 from constants import ROWS, COLS
 

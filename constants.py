@@ -1,5 +1,3 @@
-"""Screen, board grid, colours, and game configuration values."""
-
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 750
 FPS = 60
@@ -74,8 +72,8 @@ DROP_ACCEL = 1.6
 HOVER_BOB_SPEED = 0.06
 HOVER_BOB_AMP = 3.5
 
-AI_TYPES = ["Human", "Random", "MCTS", "Minimax"]
-AI_TYPES_SP = ["Random", "MCTS", "Minimax"]
+AI_TYPES = ["Human", "Random", "MCTS", "Minimax", "ML-Minimax", "ML-MCTS"]
+AI_TYPES_SP = ["Random", "MCTS", "Minimax", "ML-Minimax", "ML-MCTS"]
 MCTS_OPTIONS = [200, 500, 1000, 2000, 5000]
 MINIMAX_DEPTHS = [2, 3, 4, 5, 6]
 
